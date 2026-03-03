@@ -1,9 +1,19 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 // API 基礎 URL - 開發環境
-const String baseUrl = 'http://localhost:3000';
+// Android emulator 無法直接使用 localhost，需改用 10.0.2.2
+String get baseUrl {
+  if (kIsWeb) return 'http://localhost:3000';
+  switch (defaultTargetPlatform) {
+    case TargetPlatform.android:
+      return 'http://10.0.2.2:3000';
+    default:
+      return 'http://localhost:3000';
+  }
+}
 
 // Secure Storage Provider
 final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
