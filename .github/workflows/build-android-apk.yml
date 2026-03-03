@@ -35,7 +35,7 @@ jobs:
         run: flutter doctor -v
 
       - name: Recreate missing platform folders
-        run: flutter create --platforms=android,ios,web .
+        run: flutter create --platforms=android,ios,web --overwrite .
 
       - name: Install dependencies
         run: flutter pub get
