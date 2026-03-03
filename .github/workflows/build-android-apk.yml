@@ -20,6 +20,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -64,4 +66,4 @@ jobs:
           fi
           git add apk/app-release.apk
           git commit -m "chore: update generated APK"
-          git push
+          git push origin HEAD:${GITHUB_REF_NAME}
