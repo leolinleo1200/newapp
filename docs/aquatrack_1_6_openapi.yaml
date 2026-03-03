@@ -1,0 +1,760 @@
+openapi: 3.0.3
+info:
+  title: AquaTrack 1.6 MVP API
+  version: "1.6.0"
+  description: >
+    AquaTrack / 游跡 — 最小可行產品（MVP）API。
+    主要涵蓋：Auth、User、CompetitionResults、PB、Teams、Join Codes、Plans、Targets、Leaderboards。
+servers:
+  - url: https://api.aquatrack.example.com/v1
+tags:
+  - name: Auth
+  - name: Users
+  - name: Competitions
+  - name: PB
+  - name: Teams
+  - name: Join
+  - name: Plans
+  - name: Targets
+  - name: Leaderboards
+paths:
+  /auth/signup:
+    post:
+      tags: [Auth]
+      summary: Email 註冊
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupRequest'
+      responses:
+        '201':
+          description: 建立成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Email 登入
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登入成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: 刷新存取權杖
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: 新 tokens
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /me:
+    get:
+      tags: [Users]
+      summary: 取得我的基本資料
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+    patch:
+      tags: [Users]
+      summary: 更新我的基本資料
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdateRequest'
+      responses:
+        '200':
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /competitions:
+    post:
+      tags: [Competitions]
+      summary: 新增比賽成績，將自動更新 PB
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompetitionResultCreate'
+      responses:
+        '201':
+          description: "Created"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetitionResult'
+    get:
+      tags: [Competitions]
+      summary: 查詢我的比賽成績
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: stroke
+          schema: { type: string }
+        - in: query
+          name: distance
+          schema: { type: integer }
+        - in: query
+          name: pool_length
+          schema: { type: string, enum: [25m, 50m] }
+      responses:
+        '200':
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CompetitionResult'
+
+  /pb:
+    get:
+      tags: [PB]
+      summary: 取得我的 PB 清單（長/短水道）
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PBEntry'
+
+  /teams:
+    post:
+      tags: [Teams]
+      summary: 教練建立隊伍
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamCreate'
+      responses:
+        '201':
+          description: "Created"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+  /teams/{teamId}/members:
+    get:
+      tags: [Teams]
+      summary: 查隊員（教練）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: teamId
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TeamMember'
+  /teams/{teamId}/join-code:
+    post:
+      tags: [Teams]
+      summary: 產生加入代碼與 QR
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: teamId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinCodeCreateRequest'
+      responses:
+        '201':
+          description: "Created"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JoinCode'
+
+  /join:
+    post:
+      tags: [Join]
+      summary: 以代碼/QR 申請加入隊伍
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code:
+                  type: string
+                  description: 教練產生的加入代碼
+              required: [code]
+      responses:
+        '201':
+          description: 送審成功（等待教練核准）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamMember'
+
+  /teams/{teamId}/members/{userId}:
+    patch:
+      tags: [Teams]
+      summary: 教練審核隊員（通過/拒絕）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: teamId
+          required: true
+          schema: { type: integer }
+        - in: path
+          name: userId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [active, rejected]
+              required: [status]
+      responses:
+        '200':
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamMember'
+
+  /plans:
+    post:
+      tags: [Plans]
+      summary: 建立課表模板/週計畫
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanCreate'
+      responses:
+        '201':
+          description: "Created"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+    get:
+      tags: [Plans]
+      summary: 查詢課表
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: team_id
+          schema: { type: integer }
+      responses:
+        '200':
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Plan'
+
+  /plans/{planId}/assign:
+    post:
+      tags: [Plans]
+      summary: 將課表指派到隊伍或個人
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: planId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanAssignRequest'
+      responses:
+        '201':
+          description: "Created"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanAssignment'
+
+  /plans/{planId}/feedback:
+    post:
+      tags: [Plans]
+      summary: 學員提交回饋（完成度/RPE/備註）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: planId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanFeedbackCreate'
+      responses:
+        '201':
+          description: "Created"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanFeedback'
+
+  /targets:
+    post:
+      tags: [Targets]
+      summary: 建立目標（教練或個人）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TargetCreate'
+      responses:
+        '201':
+          description: "Created"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Target'
+    get:
+      tags: [Targets]
+      summary: 查詢目標（依自己或指定 athleteId）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: athleteId
+          schema: { type: integer }
+      responses:
+        '200':
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Target'
+
+  /targets/{targetId}:
+    patch:
+      tags: [Targets]
+      summary: 更新目標（狀態/內容）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: targetId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TargetUpdate'
+      responses:
+        '200':
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Target'
+
+  /official-records:
+    get:
+      tags: [Leaderboards]
+      summary: 官方標竿資料（WR/OR/國家等）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: country
+          schema: { type: string }
+        - in: query
+          name: type
+          schema: { type: string, enum: [WR, OR, NR] }
+        - in: query
+          name: stroke
+          schema: { type: string }
+        - in: query
+          name: distance
+          schema: { type: integer }
+        - in: query
+          name: pool_length
+          schema: { type: string, enum: [25m, 50m] }
+      responses:
+        '200':
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OfficialRecord'
+
+  /compare:
+    get:
+      tags: [Leaderboards]
+      summary: 我的 PB 與官方標竿比較
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: stroke
+          schema: { type: string }
+        - in: query
+          name: distance
+          schema: { type: integer }
+        - in: query
+          name: pool_length
+          schema: { type: string, enum: [25m, 50m] }
+      responses:
+        '200':
+          description: "OK"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompareResult'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    BadRequest:
+      description: 參數錯誤
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: 未授權
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        code: { type: string }
+        message: { type: string }
+
+    SignupRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 6 }
+        name: { type: string }
+        role: { type: string, enum: [swimmer, coach] }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token: { type: string }
+
+    AuthTokens:
+      type: object
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        token_type: { type: string, example: Bearer }
+        expires_in: { type: integer, example: 3600 }
+
+    User:
+      type: object
+      properties:
+        user_id: { type: integer }
+        email: { type: string }
+        name: { type: string }
+        role: { type: string, enum: [swimmer, coach, admin] }
+        created_at: { type: string, format: date-time }
+
+    UserUpdateRequest:
+      type: object
+      properties:
+        name: { type: string }
+
+    CompetitionResultCreate:
+      type: object
+      required: [stroke, distance, pool_length, time_ms, meet_name, date]
+      properties:
+        stroke: { type: string, example: freestyle }
+        distance: { type: integer, example: 50 }
+        pool_length: { type: string, enum: [25m, 50m] }
+        time_ms: { type: integer, example: 35000 }
+        meet_name: { type: string }
+        date: { type: string, format: date }
+
+    CompetitionResult:
+      allOf:
+        - $ref: '#/components/schemas/CompetitionResultCreate'
+        - type: object
+          properties:
+            result_id: { type: integer }
+
+    PBEntry:
+      type: object
+      properties:
+        stroke: { type: string }
+        distance: { type: integer }
+        pool_length: { type: string, enum: [25m, 50m] }
+        time_ms: { type: integer }
+        date: { type: string, format: date }
+
+    TeamCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+
+    Team:
+      type: object
+      properties:
+        team_id: { type: integer }
+        name: { type: string }
+        description: { type: string }
+        created_at: { type: string, format: date-time }
+
+    TeamMember:
+      type: object
+      properties:
+        team_id: { type: integer }
+        user_id: { type: integer }
+        status: { type: string, enum: [pending, active, rejected] }
+
+    JoinCodeCreateRequest:
+      type: object
+      properties:
+        expires_at: { type: string, format: date-time }
+        max_uses: { type: integer }
+      required: []
+
+    JoinCode:
+      type: object
+      properties:
+        code_id: { type: integer }
+        team_id: { type: integer }
+        code: { type: string }
+        qr_svg: { type: string }
+        expires_at: { type: string, format: date-time }
+        max_uses: { type: integer }
+        used_count: { type: integer }
+
+    PlanCreate:
+      type: object
+      required: [title]
+      properties:
+        team_id: { type: integer }
+        title: { type: string }
+        is_template: { type: boolean, default: false }
+        week_start: { type: string, format: date }
+        description: { type: string }
+        sets:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanSetCreate'
+
+    PlanSetCreate:
+      type: object
+      properties:
+        order_no: { type: integer }
+        stroke: { type: string }
+        distance: { type: integer }
+        repetitions: { type: string, example: "8x50" }
+        target_pace_ms: { type: integer }
+        notes: { type: string }
+
+    Plan:
+      type: object
+      properties:
+        plan_id: { type: integer }
+        team_id: { type: integer }
+        title: { type: string }
+        is_template: { type: boolean }
+        week_start: { type: string, format: date }
+        description: { type: string }
+        sets:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanSet'
+
+    PlanSet:
+      allOf:
+        - $ref: '#/components/schemas/PlanSetCreate'
+        - type: object
+          properties:
+            plan_set_id: { type: integer }
+
+    PlanAssignRequest:
+      type: object
+      properties:
+        team_id: { type: integer }
+        athlete_user_id: { type: integer }
+        due_date: { type: string, format: date }
+      required: []
+
+    PlanAssignment:
+      type: object
+      properties:
+        assignment_id: { type: integer }
+        plan_id: { type: integer }
+        team_id: { type: integer }
+        athlete_user_id: { type: integer }
+        assigned_at: { type: string, format: date-time }
+        due_date: { type: string, format: date }
+
+    PlanFeedbackCreate:
+      type: object
+      required: [completion_percent]
+      properties:
+        completion_percent: { type: integer, minimum: 0, maximum: 100 }
+        rpe: { type: integer, minimum: 1, maximum: 10 }
+        comment: { type: string }
+
+    PlanFeedback:
+      allOf:
+        - $ref: '#/components/schemas/PlanFeedbackCreate'
+        - type: object
+          properties:
+            feedback_id: { type: integer }
+            assignment_id: { type: integer }
+            athlete_user_id: { type: integer }
+            created_at: { type: string, format: date-time }
+
+    TargetCreate:
+      type: object
+      required: [stroke, distance, pool_length, target_ms]
+      properties:
+        athlete_user_id: { type: integer, description: 當教練建立時必填 }
+        stroke: { type: string }
+        distance: { type: integer }
+        pool_length: { type: string, enum: [25m, 50m] }
+        target_ms: { type: integer }
+        due_date: { type: string, format: date }
+        note: { type: string }
+
+    Target:
+      type: object
+      properties:
+        target_id: { type: integer }
+        athlete_user_id: { type: integer }
+        created_by_user_id: { type: integer }
+        stroke: { type: string }
+        distance: { type: integer }
+        pool_length: { type: string, enum: [25m, 50m] }
+        target_ms: { type: integer }
+        baseline_ms: { type: integer }
+        due_date: { type: string, format: date }
+        status: { type: string, enum: [active, completed, expired, cancelled] }
+        note: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    TargetUpdate:
+      type: object
+      properties:
+        target_ms: { type: integer }
+        due_date: { type: string, format: date }
+        status: { type: string, enum: [active, completed, expired, cancelled] }
+        note: { type: string }
+
+    OfficialRecord:
+      type: object
+      properties:
+        record_id: { type: integer }
+        type: { type: string, enum: [WR, OR, NR] }
+        country: { type: string }
+        stroke: { type: string }
+        distance: { type: integer }
+        pool_length: { type: string, enum: [25m, 50m] }
+        time_ms: { type: integer }
+        holder: { type: string }
+        date: { type: string, format: date }
+
+    CompareResult:
+      type: object
+      properties:
+        stroke: { type: string }
+        distance: { type: integer }
+        pool_length: { type: string, enum: [25m, 50m] }
+        my_pb_ms: { type: integer }
+        record_ms: { type: integer }
+        gap_ms: { type: integer }
