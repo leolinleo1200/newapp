@@ -36,9 +36,25 @@ export class TeamsController {
     return this.teamsService.approveMember(teamId, userId, req.user.userId);
   }
 
+  @Post(':teamId/reject/:userId')
+  @Roles('coach', 'admin')
+  async reject(
+    @Request() req,
+    @Param('teamId') teamId: string,
+    @Param('userId') userId: string,
+  ) {
+    return this.teamsService.rejectMember(teamId, userId, req.user.userId);
+  }
+
   @Get(':teamId/members')
   @Roles('coach', 'admin')
   async members(@Param('teamId') teamId: string) {
     return this.teamsService.listMembers(teamId);
+  }
+
+  @Get(':teamId/pending')
+  @Roles('coach', 'admin')
+  async pending(@Param('teamId') teamId: string) {
+    return this.teamsService.listPending(teamId);
   }
 }

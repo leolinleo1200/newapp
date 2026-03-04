@@ -467,8 +467,11 @@ class _TeamTabState extends ConsumerState<TeamTab> {
   final teamIdCtrl = TextEditingController();
   final teamNameCtrl = TextEditingController();
   final teamDescCtrl = TextEditingController();
+  final memberUserIdCtrl = TextEditingController();
   dynamic teamInfo;
   List<dynamic> members = [];
+  List<dynamic> pendingMembers = [];
+  dynamic selectedUserResults;
 
   Future<void> createTeam() async {
     try {
@@ -512,11 +515,53 @@ class _TeamTabState extends ConsumerState<TeamTab> {
 
       if (widget.role == 'coach' || widget.role == 'admin') {
         final m = await dio.get('/teams/${teamIdCtrl.text.trim()}/members');
-        setState(() => members = (m.data as List?) ?? []);
+        final p = await dio.get('/teams/${teamIdCtrl.text.trim()}/pending');
+        setState(() {
+          members = (m.data as List?) ?? [];
+          pendingMembers = (p.data as List?) ?? [];
+        });
       }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('查詢隊伍失敗')));
+      }
+    }
+  }
+
+  Future<void> approveMember(String userId) async {
+    try {
+      final dio = ref.read(apiClientProvider);
+      await dio.post('/teams/${teamIdCtrl.text.trim()}/approve/$userId');
+      await loadTeam();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('核准失敗')));
+      }
+    }
+  }
+
+  Future<void> rejectMember(String userId) async {
+    try {
+      final dio = ref.read(apiClientProvider);
+      await dio.post('/teams/${teamIdCtrl.text.trim()}/reject/$userId');
+      await loadTeam();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('拒絕失敗')));
+      }
+    }
+  }
+
+  Future<void> loadUserResults() async {
+    final uid = memberUserIdCtrl.text.trim();
+    if (uid.isEmpty) return;
+    try {
+      final dio = ref.read(apiClientProvider);
+      final res = await dio.get('/users/$uid/results');
+      setState(() => selectedUserResults = res.data);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('查詢學員成績失敗')));
       }
     }
   }
@@ -551,6 +596,31 @@ class _TeamTabState extends ConsumerState<TeamTab> {
               subtitle: Text(teamInfo['description']?.toString() ?? ''),
             ),
           ),
+        if (pendingMembers.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          const Text('待審核申請', style: TextStyle(fontWeight: FontWeight.bold)),
+          ...pendingMembers.map((m) => Card(
+                child: ListTile(
+                  title: Text(m['user']?['name']?.toString() ?? '-'),
+                  subtitle: Text(m['user']?['email']?.toString() ?? ''),
+                  trailing: Wrap(
+                    spacing: 8,
+                    children: [
+                      IconButton(
+                        onPressed: () => approveMember(m['userId'].toString()),
+                        icon: const Icon(Icons.check, color: Colors.green),
+                        tooltip: '核准',
+                      ),
+                      IconButton(
+                        onPressed: () => rejectMember(m['userId'].toString()),
+                        icon: const Icon(Icons.close, color: Colors.red),
+                        tooltip: '拒絕',
+                      ),
+                    ],
+                  ),
+                ),
+              )),
+        ],
         if (members.isNotEmpty) ...[
           const SizedBox(height: 12),
           const Text('隊員列表', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -558,6 +628,22 @@ class _TeamTabState extends ConsumerState<TeamTab> {
                 title: Text(m['user']?['name']?.toString() ?? '-'),
                 subtitle: Text(m['user']?['email']?.toString() ?? ''),
               )),
+        ],
+        if (widget.role == 'coach' || widget.role == 'admin') ...[
+          const Divider(height: 24),
+          const Text('查詢學員歷史成績', style: TextStyle(fontWeight: FontWeight.bold)),
+          TextField(controller: memberUserIdCtrl, decoration: const InputDecoration(labelText: '學員 User ID')),
+          const SizedBox(height: 8),
+          ElevatedButton(onPressed: loadUserResults, child: const Text('查詢學員成績')),
+          if (selectedUserResults != null) ...[
+            const SizedBox(height: 8),
+            Text('學員：${selectedUserResults['user']?['name'] ?? '-'}'),
+            ...((selectedUserResults['results'] as List?) ?? []).map((r) => ListTile(
+                  dense: true,
+                  title: Text('${r['stroke']} ${r['distance']}m (${r['poolLength']})'),
+                  trailing: Text('${r['timeMs']} ms'),
+                )),
+          ],
         ],
       ],
     );

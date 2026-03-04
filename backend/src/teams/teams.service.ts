@@ -76,4 +76,26 @@ export class TeamsService {
       order: { joinedAt: 'ASC' },
     });
   }
+
+  async listPending(teamId: string) {
+    return this.memberRepo.find({
+      where: { teamId, status: 'pending' },
+      relations: ['user'],
+      order: { joinedAt: 'ASC' },
+    });
+  }
+
+  async rejectMember(teamId: string, userId: string, coachUserId: string) {
+    const team = await this.teamRepo.findOne({ where: { teamId } });
+    if (!team) throw new NotFoundException('Team not found');
+    if (team.createdByUserId !== coachUserId) {
+      throw new NotFoundException('No permission to reject for this team');
+    }
+
+    const member = await this.memberRepo.findOne({ where: { teamId, userId } });
+    if (!member) throw new NotFoundException('Join request not found');
+
+    member.status = 'rejected';
+    return this.memberRepo.save(member);
+  }
 }
