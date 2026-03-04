@@ -4,6 +4,9 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { TeamsModule } from './teams/teams.module';
+import { ResultsModule } from './results/results.module';
+import { PbModule } from './pb/pb.module';
 import { User } from './users/entities/user.entity';
 import { Team } from './teams/entities/team.entity';
 import { TeamMember } from './teams/entities/team-member.entity';
@@ -27,6 +30,9 @@ import { OfficialRecord } from './pb/entities/official-record.entity';
       logging: true,
     }),
     AuthModule,
+    TeamsModule,
+    ResultsModule,
+    PbModule,
   ],
   controllers: [AppController],
   providers: [AppService],
