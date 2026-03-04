@@ -104,7 +104,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     } catch (e) {
       String message = '發生錯誤，請稍後再試';
       if (e is DioException) {
-        message = e.response?.data?['message']?.toString() ?? e.message ?? message;
+        final data = e.response?.data;
+        if (data is Map && data['message'] != null) {
+          message = data['message'].toString();
+        } else {
+          message = e.message ?? message;
+        }
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
@@ -191,10 +196,17 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   }
 }
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.userData});
 
   final Map<String, dynamic> userData;
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int index = 0;
 
   Future<void> _logout(BuildContext context) async {
     await const FlutterSecureStorage().delete(key: 'access_token');
@@ -207,8 +219,15 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = userData['name']?.toString() ?? '使用者';
-    final role = userData['role']?.toString() ?? 'swimmer';
+    final name = widget.userData['name']?.toString() ?? '使用者';
+    final role = widget.userData['role']?.toString() ?? 'swimmer';
+
+    final pages = [
+      DashboardTab(name: name, role: role),
+      const ResultsTab(),
+      const PbTab(),
+      TeamTab(role: role),
+    ];
 
     return Scaffold(
       appBar: AppBar(
@@ -221,23 +240,326 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.pool, size: 64, color: Colors.blue),
-              const SizedBox(height: 16),
-              Text('歡迎回來，$name', style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 8),
-              Text('角色：$role', style: Theme.of(context).textTheme.bodyLarge),
-              const SizedBox(height: 20),
-              const Text('登入成功！接下來可串接 Dashboard / 訓練紀錄 / 團隊功能。'),
-            ],
-          ),
+      body: pages[index],
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: index,
+        onDestinationSelected: (v) => setState(() => index = v),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.home), label: '首頁'),
+          NavigationDestination(icon: Icon(Icons.timer), label: '成績'),
+          NavigationDestination(icon: Icon(Icons.emoji_events), label: 'PB'),
+          NavigationDestination(icon: Icon(Icons.groups), label: '團隊'),
+        ],
+      ),
+    );
+  }
+}
+
+class DashboardTab extends StatelessWidget {
+  const DashboardTab({super.key, required this.name, required this.role});
+
+  final String name;
+  final String role;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.pool, size: 64, color: Colors.blue),
+            const SizedBox(height: 16),
+            Text('歡迎回來，$name', style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 8),
+            Text('角色：$role', style: Theme.of(context).textTheme.bodyLarge),
+            const SizedBox(height: 20),
+            const Text('你可以在下方查看成績、PB 與團隊管理。'),
+          ],
         ),
       ),
+    );
+  }
+}
+
+class ResultsTab extends ConsumerStatefulWidget {
+  const ResultsTab({super.key});
+
+  @override
+  ConsumerState<ResultsTab> createState() => _ResultsTabState();
+}
+
+class _ResultsTabState extends ConsumerState<ResultsTab> {
+  List<dynamic> results = [];
+  bool loading = false;
+
+  final strokeCtrl = TextEditingController(text: 'Freestyle');
+  final distanceCtrl = TextEditingController(text: '50');
+  final timeMsCtrl = TextEditingController(text: '35000');
+  String pool = '25m';
+
+  @override
+  void initState() {
+    super.initState();
+    fetchResults();
+  }
+
+  Future<void> fetchResults() async {
+    setState(() => loading = true);
+    try {
+      final dio = ref.read(apiClientProvider);
+      final res = await dio.get('/results');
+      setState(() => results = (res.data as List?) ?? []);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('載入成績失敗')));
+      }
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> addResult() async {
+    try {
+      final dio = ref.read(apiClientProvider);
+      await dio.post('/results', data: {
+        'stroke': strokeCtrl.text.trim(),
+        'distance': int.tryParse(distanceCtrl.text.trim()) ?? 0,
+        'poolLength': pool,
+        'timeMs': int.tryParse(timeMsCtrl.text.trim()) ?? 0,
+      });
+      await fetchResults();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('新增成功')));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('新增失敗')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RefreshIndicator(
+      onRefresh: fetchResults,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Text('新增成績', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          TextField(controller: strokeCtrl, decoration: const InputDecoration(labelText: '泳姿')),
+          TextField(controller: distanceCtrl, decoration: const InputDecoration(labelText: '距離(公尺)'), keyboardType: TextInputType.number),
+          TextField(controller: timeMsCtrl, decoration: const InputDecoration(labelText: '時間(ms)'), keyboardType: TextInputType.number),
+          DropdownButtonFormField<String>(
+            value: pool,
+            items: const [
+              DropdownMenuItem(value: '25m', child: Text('25m')),
+              DropdownMenuItem(value: '50m', child: Text('50m')),
+            ],
+            onChanged: (v) => setState(() => pool = v ?? '25m'),
+            decoration: const InputDecoration(labelText: '池長'),
+          ),
+          const SizedBox(height: 8),
+          ElevatedButton(onPressed: addResult, child: const Text('送出成績')),
+          const Divider(height: 24),
+          const Text('我的成績', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          if (loading)
+            const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))
+          else if (results.isEmpty)
+            const Text('目前沒有成績')
+          else
+            ...results.map((r) => Card(
+                  child: ListTile(
+                    title: Text('${r['stroke']} ${r['distance']}m (${r['poolLength']})'),
+                    subtitle: Text('timeMs: ${r['timeMs']}'),
+                  ),
+                )),
+        ],
+      ),
+    );
+  }
+}
+
+class PbTab extends ConsumerStatefulWidget {
+  const PbTab({super.key});
+
+  @override
+  ConsumerState<PbTab> createState() => _PbTabState();
+}
+
+class _PbTabState extends ConsumerState<PbTab> {
+  List<dynamic> pb = [];
+  List<dynamic> bench = [];
+  bool loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    loadData();
+  }
+
+  Future<void> loadData() async {
+    setState(() => loading = true);
+    try {
+      final dio = ref.read(apiClientProvider);
+      final p1 = await dio.get('/pb');
+      final p2 = await dio.get('/benchmarks');
+      setState(() {
+        pb = (p1.data as List?) ?? [];
+        bench = (p2.data as List?) ?? [];
+      });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('載入 PB/標竿失敗')));
+      }
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RefreshIndicator(
+      onRefresh: loadData,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Text('個人最佳 PB', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          if (loading)
+            const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))
+          else if (pb.isEmpty)
+            const Text('尚無 PB 資料')
+          else
+            ...pb.map((e) => ListTile(
+                  title: Text('${e['stroke']} ${e['distance']}m (${e['poolLength']})'),
+                  trailing: Text('${e['bestTimeMs']} ms'),
+                )),
+          const Divider(height: 24),
+          const Text('官方標竿', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          if (bench.isEmpty)
+            const Text('尚無標竿資料（可由後端 seed）')
+          else
+            ...bench.take(20).map((e) => ListTile(
+                  title: Text('${e['type']} ${e['stroke']} ${e['distance']}m'),
+                  trailing: Text('${e['timeMs']} ms'),
+                )),
+        ],
+      ),
+    );
+  }
+}
+
+class TeamTab extends ConsumerStatefulWidget {
+  const TeamTab({super.key, required this.role});
+
+  final String role;
+
+  @override
+  ConsumerState<TeamTab> createState() => _TeamTabState();
+}
+
+class _TeamTabState extends ConsumerState<TeamTab> {
+  final teamIdCtrl = TextEditingController();
+  final teamNameCtrl = TextEditingController();
+  final teamDescCtrl = TextEditingController();
+  dynamic teamInfo;
+  List<dynamic> members = [];
+
+  Future<void> createTeam() async {
+    try {
+      final dio = ref.read(apiClientProvider);
+      final res = await dio.post('/teams', data: {
+        'name': teamNameCtrl.text.trim(),
+        'description': teamDescCtrl.text.trim(),
+      });
+      teamIdCtrl.text = res.data['teamId'].toString();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('建立隊伍成功')));
+      }
+      await loadTeam();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('建立隊伍失敗（需教練角色）')));
+      }
+    }
+  }
+
+  Future<void> joinTeam() async {
+    try {
+      final dio = ref.read(apiClientProvider);
+      await dio.post('/teams/${teamIdCtrl.text.trim()}/join');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已送出加入申請')));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('加入隊伍失敗')));
+      }
+    }
+  }
+
+  Future<void> loadTeam() async {
+    if (teamIdCtrl.text.trim().isEmpty) return;
+    try {
+      final dio = ref.read(apiClientProvider);
+      final res = await dio.get('/teams/${teamIdCtrl.text.trim()}');
+      setState(() => teamInfo = res.data);
+
+      if (widget.role == 'coach' || widget.role == 'admin') {
+        final m = await dio.get('/teams/${teamIdCtrl.text.trim()}/members');
+        setState(() => members = (m.data as List?) ?? []);
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('查詢隊伍失敗')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Text('團隊', style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        if (widget.role == 'coach' || widget.role == 'admin') ...[
+          TextField(controller: teamNameCtrl, decoration: const InputDecoration(labelText: '隊伍名稱')),
+          TextField(controller: teamDescCtrl, decoration: const InputDecoration(labelText: '隊伍描述')),
+          ElevatedButton(onPressed: createTeam, child: const Text('建立隊伍')),
+          const Divider(height: 24),
+        ],
+        TextField(controller: teamIdCtrl, decoration: const InputDecoration(labelText: '隊伍 ID')),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(child: ElevatedButton(onPressed: loadTeam, child: const Text('查詢隊伍'))),
+            const SizedBox(width: 8),
+            Expanded(child: OutlinedButton(onPressed: joinTeam, child: const Text('申請加入'))),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (teamInfo != null)
+          Card(
+            child: ListTile(
+              title: Text(teamInfo['name']?.toString() ?? '-'),
+              subtitle: Text(teamInfo['description']?.toString() ?? ''),
+            ),
+          ),
+        if (members.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          const Text('隊員列表', style: TextStyle(fontWeight: FontWeight.bold)),
+          ...members.map((m) => ListTile(
+                title: Text(m['user']?['name']?.toString() ?? '-'),
+                subtitle: Text(m['user']?['email']?.toString() ?? ''),
+              )),
+        ],
+      ],
     );
   }
 }

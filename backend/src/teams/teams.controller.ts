@@ -1,14 +1,17 @@
 import { Body, Controller, Get, Param, Post, Request, UseGuards, ValidationPipe } from '@nestjs/common';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import { CreateTeamDto } from './dto/create-team.dto';
 import { TeamsService } from './teams.service';
 
 @Controller('teams')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class TeamsController {
   constructor(private readonly teamsService: TeamsService) {}
 
   @Post()
+  @Roles('coach', 'admin')
   async create(@Request() req, @Body(ValidationPipe) dto: CreateTeamDto) {
     return this.teamsService.createTeam(req.user.userId, dto);
   }
@@ -24,6 +27,7 @@ export class TeamsController {
   }
 
   @Post(':teamId/approve/:userId')
+  @Roles('coach', 'admin')
   async approve(
     @Request() req,
     @Param('teamId') teamId: string,
@@ -33,6 +37,7 @@ export class TeamsController {
   }
 
   @Get(':teamId/members')
+  @Roles('coach', 'admin')
   async members(@Param('teamId') teamId: string) {
     return this.teamsService.listMembers(teamId);
   }
