@@ -54,16 +54,3 @@ jobs:
           name: aquatrack-android-apk
           path: frontend/build/app/outputs/flutter-apk/*.apk
 
-      - name: Commit APK into repo (for clone visibility)
-        run: |
-          mkdir -p apk
-          cp frontend/build/app/outputs/flutter-apk/app-release.apk apk/app-release.apk
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [ -z "$(git status --porcelain apk/app-release.apk)" ]; then
-            echo "No APK change to commit"
-            exit 0
-          fi
-          git add apk/app-release.apk
-          git commit -m "chore: update generated APK"
-          git push origin HEAD:${GITHUB_REF_NAME}
